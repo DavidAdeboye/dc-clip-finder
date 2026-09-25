@@ -283,6 +283,47 @@ $("apiKey").addEventListener("change", (e) => {
 
 // ---------- ffmpeg ----------
 let ffmpeg = null;
+
+// Fetch a URL manually (with progress logging) and turn it into a blob: URL,
+// so we can see what's happening on slow connections instead of a silent hang.
+async function fetchToBlobURLWithProgress(url, mimeType, label) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${label}: HTTP ${res.status} fetching ${url}`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  let lastLoggedPct = -10;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (total) {
+      const pct = Math.floor((received / total) * 100);
+      if (pct - lastLoggedPct >= 10) {
+        log(`  ${label}: ${pct}% (${(received / 1e6).toFixed(1)}MB / ${(total / 1e6).toFixed(1)}MB)`);
+        lastLoggedPct = pct;
+      }
+    } else if (received - lastLoggedPct * 1e6 > 5e6) {
+      log(`  ${label}: ${(received / 1e6).toFixed(1)}MB downloaded...`);
+      lastLoggedPct = received / 1e6;
+    }
+  }
+  const blob = new Blob(chunks, { type: mimeType });
+  log(`  ${label}: done (${(received / 1e6).toFixed(1)}MB).`);
+  return URL.createObjectURL(blob);
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s — likely a slow or blocked connection`)), ms)
+    ),
+  ]);
+}
+
 async function getFFmpeg() {
   if (ffmpeg) return ffmpeg;
   log("Loading FFmpeg WebAssembly (~30MB, downloaded once)...");
@@ -294,11 +335,24 @@ async function getFFmpeg() {
   try {
     const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
     const ffmpegBase = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm";
-    await instance.load({
-      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-      classWorkerURL: await toBlobURL(`${ffmpegBase}/worker.js`, "text/javascript"),
-    });
+
+    const coreURL = await withTimeout(
+      fetchToBlobURLWithProgress(`${base}/ffmpeg-core.js`, "text/javascript", "core.js"),
+      60000, "core.js download"
+    );
+    const wasmURL = await withTimeout(
+      fetchToBlobURLWithProgress(`${base}/ffmpeg-core.wasm`, "application/wasm", "core.wasm"),
+      180000, "core.wasm download"
+    );
+    const classWorkerURL = await withTimeout(
+      fetchToBlobURLWithProgress(`${ffmpegBase}/worker.js`, "text/javascript", "worker.js"),
+      60000, "worker.js download"
+    );
+
+    await withTimeout(
+      instance.load({ coreURL, wasmURL, classWorkerURL }),
+      60000, "FFmpeg init"
+    );
   } catch (e) {
     throw new Error(`Could not load FFmpeg engine: ${e.message || e}`);
   }
