@@ -1,10 +1,7 @@
-    // Self-hosted, same-origin copies of ffmpeg-core + worker (see /ffmpeg/ next to this file).
-    // Loading these cross-origin from unpkg.com breaks: browsers refuse to construct a Worker
-    // from a cross-origin script, and wrapping the worker script in a blob: URL breaks its
-    // internal relative imports (./const.js, ./errors.js). Same-origin avoids both problems
-    // and lets the browser stream-compile the wasm instead of buffering it all in memory first.
-    await instance.load({
-      coreURL: "/ffmpeg/ffmpeg-core.js",
-      wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-      classWorkerURL: "/ffmpeg/worker.js",
-    });
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>DC Clip Finder - Contextual Multi-Cut Splicer</title>
