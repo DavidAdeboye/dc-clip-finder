@@ -293,15 +293,10 @@ async function getFFmpeg() {
     if (m) instance._duration = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
   });
   try {
-    // Self-hosted, same-origin copies of ffmpeg-core + worker (see /ffmpeg/ next to this file).
-    // Loading these cross-origin from unpkg.com breaks: browsers refuse to construct a Worker
-    // from a cross-origin script, and wrapping the worker script in a blob: URL breaks its
-    // internal relative imports (./const.js, ./errors.js). Same-origin avoids both problems
-    // and lets the browser stream-compile the wasm instead of buffering it all in memory first.
     await instance.load({
       coreURL: "/ffmpeg/ffmpeg-core.js",
       wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-      classWorkerURL: "/ffmpeg/worker.js",
+      classWorkerURL: `${window.location.origin}/ffmpeg/worker.js`,
     });
   } catch (e) {
     throw new Error(`Could not load FFmpeg engine: ${e.message || e}`);
