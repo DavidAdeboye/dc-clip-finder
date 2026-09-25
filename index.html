@@ -182,7 +182,7 @@ import { FFmpeg } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.
 import { fetchFile, toBlobURL } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js";
 import { zipSync } from "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js";
 
-const MODEL = "gemini-3.8-flash"; // gemini-2.5-flash was retired; 3.8-flash supports multimodal audio and structured JSON schema via the same generateContent endpoint
+const MODEL = "gemini-3.5-flash"; // gemini-2.5-flash was retired; 3.8-flash supports multimodal audio and structured JSON schema via the same generateContent endpoint
 const CHUNK_SECONDS = 900;   // 15 min per chunk sent to Gemini
 const OVERLAP_SECONDS = 25;  // overlap so moments at chunk edges aren't missed
 
