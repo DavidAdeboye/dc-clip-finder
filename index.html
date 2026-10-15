@@ -1,663 +1,318 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>DC Clip Finder - Contextual Multi-Cut Splicer</title>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#e7e9f0">
+<title>DC Clip Finder</title>
 <style>
-  :root{
-    --bg:#0b0d0f; --panel:#14171a; --panel2:#1c2025; --panel3:#232931; --line:#262b31;
-    --text:#eef1f3; --muted:#8b95a1; --accent:#ff5a2b; --good:#2bd67b; --warn:#ffcf4d; --info:#38bdf8;
-    padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px);
-    box-sizing:border-box;
-  }
-  *{box-sizing:border-box}
-  html{scroll-padding-top: env(safe-area-inset-top,0px);}
-  body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased;
-  }
-  header{
-    padding:20px 18px 14px; border-bottom:1px solid var(--line);
-    position:sticky; top:0; background:var(--bg); z-index:5;
-    padding-top:calc(20px + env(safe-area-inset-top,0px));
-  }
-  header h1{margin:0; font-size:19px; letter-spacing:-0.01em;}
-  header h1 span{color:var(--accent);}
-  header p{margin:4px 0 0; color:var(--muted); font-size:13px;}
-  main{padding:16px; max-width:680px; margin:0 auto; padding-bottom:60px;}
-  .card{
-    background:var(--panel); border:1px solid var(--line); border-radius:14px;
-    padding:16px; margin-bottom:14px;
-  }
-  .card h2{margin:0 0 12px; font-size:14px; color:var(--muted); font-weight:600; text-transform:none;}
-  label{display:block; font-size:13px; color:var(--muted); margin:10px 0 6px;}
-  label:first-of-type{margin-top:0;}
-  input[type=text], input[type=password], input[type=number], select{
-    width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
-    padding:11px 12px; border-radius:9px; font-size:15px;
-  }
-  input[type=file]{
-    width:100%; padding:12px; background:var(--panel2); border:1px dashed var(--line);
-    border-radius:9px; color:var(--muted); font-size:13px;
-  }
-  .row{display:flex; gap:10px;}
-  .row > div{flex:1;}
-  button{
-    width:100%; padding:15px; border:none; border-radius:11px; font-size:16px;
-    font-weight:600; cursor:pointer; margin-top:14px;
-  }
-  .btn-main{background:var(--accent); color:#fff; transition:opacity .2s;}
-  .btn-main:hover{opacity:.92;}
-  .btn-main:disabled{background:#3a2c24; color:#8a7368; cursor:not-allowed;}
-  .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--text); width:auto; padding:10px 14px; font-size:14px; margin-top:0;}
-  .btn-sm{width:auto; padding:8px 12px; font-size:13px; margin-top:0; border-radius:8px;}
-  #log{
-    background:#000; border-radius:10px; padding:12px; font-family:ui-monospace,Menlo,Consolas,monospace;
-    font-size:12px; color:#9ae6b4; max-height:190px; overflow-y:auto; white-space:pre-wrap; display:none;
-  }
-  #log.show{display:block; margin-top:12px;}
-  .bar{height:6px; background:var(--panel2); border-radius:4px; overflow:hidden; margin-top:10px; display:none;}
-  .bar.show{display:block;}
-  .bar > div{height:100%; width:0%; background:var(--accent); transition:width .3s;}
-  .clip{
-    background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px;
-  }
-  .clip .top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
-  .clip .title{font-weight:600; font-size:15px; line-height:1.3;}
-  .badges{display:flex; gap:6px; align-items:center; flex-shrink:0;}
-  .badge{
-    font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px;
-    background:rgba(56,189,248,.15); color:var(--info); border:1px solid rgba(56,189,248,.3);
-  }
-  .badge.cuts{background:rgba(255,90,43,.15); color:var(--accent); border-color:rgba(255,90,43,.3);}
-  .score{
-    font-size:12px; font-weight:700; padding:3px 9px; border-radius:20px;
-    background:rgba(43,214,123,.15); color:var(--good);
-  }
-  .score.mid{background:rgba(255,207,77,.15); color:var(--warn);}
-  .clip .meta{color:var(--muted); font-size:12px; margin:6px 0 8px;}
-  .clip .reason{color:#c3cad2; font-size:13px; line-height:1.45; margin-bottom:10px;}
-  .clip .context-note{
-    background:var(--panel3); border-left:3px solid var(--accent); padding:8px 10px;
-    border-radius:4px 8px 8px 4px; font-size:12.5px; color:#e2e8f0; margin-bottom:10px; line-height:1.4;
-  }
-  .segments{
-    margin:10px 0 12px; display:flex; flex-direction:column; gap:5px;
-  }
-  .seg-row{
-    display:flex; align-items:center; gap:8px; font-size:12px; background:var(--panel);
-    padding:6px 9px; border-radius:7px; border:1px solid var(--line);
-  }
-  .seg-type{
-    font-weight:700; text-transform:uppercase; font-size:10px; letter-spacing:0.04em;
-    padding:2px 6px; border-radius:4px; background:rgba(255,255,255,.08); color:#cbd5e1;
-  }
-  .seg-time{color:var(--muted); font-family:ui-monospace,Menlo,monospace; font-size:11.5px;}
-  .seg-desc{flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .clip .actions{display:flex; gap:8px; margin-top:8px;}
-  a.dl{
-    display:inline-block; text-decoration:none; text-align:center; flex:1;
-    background:var(--panel); border:1px solid var(--line); color:var(--text);
-    padding:9px; border-radius:8px; font-size:13px; font-weight:600;
-  }
-  a.dl:hover{border-color:var(--accent);}
-  #results{margin-top:6px;}
-  #resultsHead{display:flex; justify-content:space-between; align-items:center; margin:22px 0 10px;}
-  #resultsHead h2{margin:0; font-size:15px; color:var(--text); font-weight:700;}
-  .hint{color:var(--muted); font-size:12px; margin-top:8px; line-height:1.5;}
-  .hint a{color:var(--accent);}
-  #err{
-    background:rgba(255,90,43,.1); border:1px solid rgba(255,90,43,.3); color:#ffb199;
-    padding:12px; border-radius:10px; font-size:13px; margin-top:12px; display:none; line-height:1.5;
-  }
-  #err.show{display:block;}
-</style>
-</head>
-<body>
-
-<header>
-  <h1>DC <span>Clip</span> Finder</h1>
-  <p>Contextual multi-cut moment splicer. Slices setup + climax into complete story clips.</p>
-</header>
+:root{--bg:#e7e9f0;--pn:#f7f8fb;--ink:#0f1220;--mu:#5d6376;--ln:#cbd0de;--ac:#2f3dff;--on:#fff;--hi:#ffd23f}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1020;--pn:#161a2e;--ink:#eceefa;--mu:#9aa1bd;--ln:#292e4c;--ac:#8591ff;--on:#0d1020}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.02em}
+.wrap{max-width:1180px;margin:auto;display:grid;grid-template-columns:minmax(0,1fr);padding:0 12px 40px}
+aside{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 8px) 0 8px}
+.top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.top span{font-size:13px;color:var(--mu)}
+#vz{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:16/9;max-height:34dvh;width:100%;margin:auto}
+#v{display:none;width:100%;height:100%;object-fit:contain;background:#000}
+#vz.on #v{display:block}#vz.on .pick{display:none}
+.pick{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--pn);border:2px dashed var(--ln);border-radius:14px;cursor:pointer;font-weight:700}
+.pick small{font-weight:400;color:var(--mu)}
+.vh{position:absolute;opacity:0;width:1px;height:1px}
+.chg{display:none;font-size:13px;color:var(--mu);text-decoration:underline;margin-top:6px;cursor:pointer}
+#vz.on+.chg{display:inline-block}
+#tl{position:relative;height:34px;margin-top:8px;cursor:pointer;touch-action:manipulation}
+#tl:before{content:"";position:absolute;left:0;right:0;top:15px;height:4px;border-radius:2px;background:var(--ln)}
+#tl i{position:absolute;top:6px;height:22px;min-width:10px;border-radius:3px;background:var(--ac);opacity:.85}
+#tl i.on{background:var(--hi);opacity:1;outline:2px solid var(--ink)}
+#ph{position:absolute;top:2px;bottom:2px;width:2px;background:var(--ink);pointer-events:none}
+#st{font-size:13px;color:var(--mu);min-height:20px;margin:2px 0 0}
+main{min-width:0}
+details.s{background:var(--pn);border:1px solid var(--ln);border-radius:14px;margin:8px 0 14px}
+summary{list-style:none;cursor:pointer;padding:14px;font-weight:700;display:flex;justify-content:space-between;min-height:48px;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary small{font-weight:400;color:var(--mu)}
+.f{padding:0 14px 14px}
+label.l{display:block;font-weight:600;margin:14px 0 2px}
+.h{font-size:13px;color:var(--mu);margin:0 0 6px}
+input,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid var(--ln);background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+textarea{min-height:110px;resize:vertical}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;color:inherit;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--ln);background:var(--pn);cursor:pointer}
+button:active{transform:scale(.98)}
+.pri{background:var(--ac);color:var(--on);border-color:var(--ac);font-weight:700;width:100%;margin-top:16px}
+button:disabled{opacity:.55}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.rh{display:flex;justify-content:space-between;align-items:center;margin:4px 0 8px}
+.rh h2{font-size:17px;margin:0}
+.rh button{min-height:36px;font-size:14px}
+.em{color:var(--mu);padding:18px;border:1px dashed var(--ln);border-radius:14px;margin:0}
+.cd{background:var(--pn);border:1px solid var(--ln);border-radius:14px;margin:0 0 10px;scroll-margin-top:44dvh}
+.cd.act{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
+.cd>header{display:flex;gap:12px;padding:12px 14px;cursor:pointer;min-height:64px}
+.sc{font-size:34px;font-weight:800;line-height:1;letter-spacing:-.04em;min-width:36px;color:var(--mu);font-variant-numeric:tabular-nums}
+.sc.hot{color:var(--ac)}
+.hd{min-width:0;flex:1}
+.tc{font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--mu)}
+.hd p{margin:2px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cd.open .hd p{-webkit-line-clamp:unset;display:block}
+.bd{display:none;padding:0 14px 14px;border-top:1px solid var(--ln)}
+.cd.open .bd{display:block}
+dl{margin:10px 0;display:grid;grid-template-columns:76px 1fr;gap:6px 10px;font-size:15px}
+dt{color:var(--mu);font-size:14px}dd{margin:0}
+.cp{display:block;width:100%;text-align:left;min-height:0;padding:7px 9px;margin:0 0 5px;background:var(--bg);font-size:15px}
+.sp{display:flex;align-items:center;gap:8px;margin:6px 0}
+.sp span{width:76px;color:var(--mu);font-size:14px}
+.sp output{font:15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:70px;text-align:center}
+.sp button{width:44px;padding:0;font-size:20px}
+.ac{display:flex;gap:8px;margin-top:12px}.ac button{flex:1;padding:0 6px}
+.ac .p{background:var(--ac);color:var(--on);border-color:var(--ac);font-weight:700}
+.row{display:flex;gap:8px;margin-bottom:8px}.row input{min-width:0}.row #vw{width:96px;flex:none}.row button{flex:none}
+.wi{font-size:13px;color:var(--mu);padding:4px 0;word-break:break-word}
+.gal{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px dashed var(--ln);border-radius:10px;cursor:pointer;font-weight:600;margin-bottom:6px}
+@media(min-width:900px){
+ .wrap{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0 28px;padding:0 24px 60px}
+ aside{top:0;align-self:start;padding-top:24px;height:fit-content}
+ main{padding-top:24px}
+ #vz{max-height:58vh}
+ .cd{scroll-margin-top:16px}
+ details.s{margin-top:0}
+}
+@media(prefers-reduced-motion:reduce){button:active{transform:none}}
+</style></head><body>
+<div class="wrap">
+<aside>
+ <div class="top"><h1>DC Clip Finder</h1><span>Footage stays on this device</span></div>
+ <div id="vz"><label class="pick" for="vf">Choose video<small>Original landscape, never uploaded</small></label><video id="v" controls playsinline></video></div>
+ <label class="chg" for="vf">Change video</label>
+ <input class="vh" type="file" id="vf" accept="video/*">
+ <div id="tl" aria-label="Episode timeline"></div>
+ <p id="st">Pick a video and add a transcript</p>
+</aside>
 
 <main>
+<details class="s" id="setup" open>
+ <summary>Setup <small id="ti">No transcript yet</small></summary>
+ <div class="f">
+  <label class="l" for="tr">Transcript with timestamps</label>
+  <p class="h">Paste it, or load a .srt, .vtt or .txt. YouTube's Show transcript, copied, works.</p>
+  <textarea id="tr" placeholder="0:00 Welcome back to the show..."></textarea>
+  <input type="file" id="tf" accept=".srt,.vtt,.txt" style="margin-top:8px">
 
-  <div class="card">
-    <h2>Setup</h2>
-    <label for="apiKey">Gemini API key</label>
-    <input type="password" id="apiKey" placeholder="AIza...">
-    <p class="hint">Free key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Saved only on this device.</p>
+  <label class="l" for="yt">Add winning clips</label>
+  <p class="h">YouTube or Shorts link: Gemini watches it for you, nothing downloads to your phone. Gallery file: only the audio is pulled out on your device and sent, about 1MB per minute. Put the views in first.</p>
+  <div class="row"><input id="yt" inputmode="url" placeholder="YouTube link"><input id="vw" placeholder="Views"><button id="yb">Add</button></div>
+  <label class="gal" for="wf">Add from gallery</label>
+  <input class="vh" type="file" id="wf" accept="video/*,audio/*" multiple>
+  <div id="wl"></div>
+
+  <label class="l" for="ex">Winning clips from your niche</label>
+  <p class="h">Filled in automatically by the clips you add above. You can also paste your own or edit it. The picker copies how they start, how long they run and how they hook.</p>
+  <textarea id="ex" placeholder="Clip 1, 2.4M views, 38s: ..."></textarea>
+
+  <div class="g">
+   <div><label class="l" for="key">Gemini API key</label><input id="key" type="password" autocomplete="off" placeholder="AIza..."></div>
+   <div><label class="l" for="model">Model</label><input id="model" value="gemini-2.5-flash"></div>
+   <div><label class="l" for="max">Longest clip, seconds</label><input id="max" type="number" inputmode="numeric" value="60"></div>
+   <div><label class="l" for="n">Clips to return</label><input id="n" type="number" inputmode="numeric" value="8"></div>
   </div>
+  <button class="pri" id="go">Find clips</button>
+ </div>
+</details>
 
-  <div class="card">
-    <h2>Episode & Splice Settings</h2>
-    <label for="file">Podcast video/audio file</label>
-    <input type="file" id="file" accept="video/*,audio/*">
-    <div class="row">
-      <div>
-        <label for="minScore">Min score (1-10)</label>
-        <input type="number" id="minScore" value="6" min="1" max="10">
-      </div>
-      <div>
-        <label for="topN">Max clips</label>
-        <input type="number" id="topN" value="12" min="1" max="50">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label for="maxLen">Max total length (seconds)</label>
-        <input type="number" id="maxLen" value="90" min="15" max="300">
-      </div>
-      <div>
-        <label for="clipMode">Clip style</label>
-        <select id="clipMode">
-          <option value="contextual" selected>Multi-cut with context (Setup + Climax)</option>
-          <option value="single">Single continuous cuts only</option>
-          <option value="any">Mix of both (best moments)</option>
-        </select>
-      </div>
-    </div>
-    <p class="hint">Multi-cut mode finds 2 or 3 connected moments across a topic (e.g. topic premise → bold take → hilarious reaction) and stitches them together seamlessly into one cohesive 20-90 second story. This produces viral-ready moments that actually make sense without context.</p>
-    <button class="btn-main" id="runBtn">Find & splice contextual clips</button>
-    <div class="bar" id="bar"><div id="barFill"></div></div>
-    <div id="log"></div>
-    <div id="err"></div>
-  </div>
-
-  <div id="resultsWrap" style="display:none;">
-    <div id="resultsHead">
-      <h2 id="resultsTitle">Clips</h2>
-      <button class="btn-ghost btn-sm" id="zipBtn">Download all (.zip)</button>
-    </div>
-    <div id="results"></div>
-  </div>
-
+<div class="rh"><h2 id="cnt">Clips</h2><button id="all" hidden>Copy all</button></div>
+<div id="out"></div>
 </main>
+</div>
 
-<script type="module">
-import { FFmpeg } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
-import { fetchFile, toBlobURL } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js";
-import { zipSync } from "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js";
+<script>
+const $=s=>document.querySelector(s),v=$('#v');
+const LS={g:k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}},s:(k,x)=>{try{localStorage.setItem(k,x)}catch(e){}}};
+let L=[],clips=[],vname='video.mp4',stopAt=0,endCb=null,act=-1;
+const say=t=>$('#st').textContent=t;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=t=>{t=Math.max(0,t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+s.toFixed(1).padStart(4,'0')};
+const mmss=t=>fmt(t).replace(/\.\d$/,'');
+const hasV=()=>!!v.getAttribute('src');
+const dur=()=>(isFinite(v.duration)&&v.duration)||(L.length?L[L.length-1].t:0)||1;
 
-const MODEL = "gemini-3.5-flash-lite"; // gemini-2.5-flash was retired; 3.8-flash supports multimodal audio and structured JSON schema via the same generateContent endpoint
-const CHUNK_SECONDS = 900;   // 15 min per chunk sent to Gemini
-const OVERLAP_SECONDS = 25;  // overlap so moments at chunk edges aren't missed
+['key','model','ex'].forEach(k=>{const e=$('#'+k),s=LS.g('dc_'+k);if(s)e.value=s;e.oninput=()=>LS.s('dc_'+k,e.value)});
+$('#vf').onchange=e=>{const f=e.target.files[0];if(!f)return;vname=f.name;v.src=URL.createObjectURL(f);$('#vz').classList.add('on');say('Loaded '+f.name)};
+v.onloadedmetadata=tl;
+$('#tf').onchange=async e=>{const f=e.target.files[0];if(f){$('#tr').value=await f.text();pt()}};
+$('#tr').oninput=pt;
 
-// Enhanced schema enforcing mandatory setup context segments
-const CLIP_SCHEMA = {
-  type: "object",
-  properties: {
-    clips: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          hook_score: { type: "integer" },
-          reason: { type: "string" },
-          context_summary: { type: "string" },
-          segments: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                start_seconds: { type: "number" },
-                end_seconds: { type: "number" },
-                type: { type: "string" }, // Must include "setup" or "premise" as the first segment, followed by "hot_take", "punchline", or "reaction"
-                description: { type: "string" }
-              },
-              required: ["start_seconds", "end_seconds", "type", "description"]
-            }
-          }
-        },
-        required: ["title", "hook_score", "reason", "context_summary", "segments"]
-      }
-    }
-  },
-  required: ["clips"]
+const TS=/^\s*(?:(\d+):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?\s*(?:-->.*)?(.*)$/;
+function parse(raw){
+  const a=[];let c=null;
+  for(let l of raw.split(/\r?\n/)){
+    l=l.replace(/<[^>]+>/g,'').trim();
+    if(!l||/^WEBVTT/.test(l)||/^\d+$/.test(l))continue;
+    const m=l.match(TS);
+    if(m){c={t:(+m[1]||0)*3600+(+m[2])*60+(+m[3])+(m[4]?+('0.'+m[4]):0),x:m[5].trim()};a.push(c)}
+    else if(c)c.x+=(c.x?' ':'')+l;
+  }
+  const o=[];for(const e of a){if(!e.x)continue;const p=o[o.length-1];if(p&&p.x===e.x)continue;o.push(e)}
+  return o;
+}
+function pt(){L=parse($('#tr').value);$('#ti').textContent=L.length?`${L.length} lines, ${mmss(L[L.length-1].t)}`:'No timestamps found'}
+
+const RULES=mx=>`You are a senior short form editor who picks podcast and interview clips that go viral. Pick moments that work COLD for a viewer who never saw the episode.
+Judge every moment on:
+1 HOOK: the first 3 seconds must be a claim, question, number, conflict or surprising statement. Start on the sharpest line. Never start on warmup, filler, "so", "um", or a reply to something the viewer did not hear.
+2 CONTEXT: cut setup that is not needed. If the clip uses a referent ("that", "he", "it", "this") never defined inside the clip, it fails unless a short setup line is included.
+3 PAYOFF: the clip must contain the answer, punchline or conclusion. Move the payoff forward by cutting windup. End right after the payoff lands, never on trailing talk.
+4 ONE IDEA: one tension that resolves. Reject tangents, name dropping without a point, and half finished thoughts.
+5 LENGTH: 20 to 60 seconds ideal, never above ${mx} seconds.
+6 PREFER: specific numbers, stories with stakes, contrarian takes, emotional admissions, funny exchanges, practical frameworks, strong opinions. REJECT: intros, outros, sponsor reads, small talk, vague motivation, anything needing earlier episode context.
+Start and end must sit on full sentence boundaries. Be harsh. Most moments are not clips.`;
+
+const ln=i=>`[${i}] ${mmss(L[i].t)} ${L[i].x}`;
+function chunks(){const o=[],T=L[L.length-1].t;for(let a=0;a<=T;a+=540){const ls=[];for(let i=0;i<L.length;i++)if(L[i].t>=a&&L[i].t<a+600)ls.push(i);if(ls.length)o.push(ls)}return o}
+
+async function llm(p){
+  const key=$('#key').value.trim(),mod=$('#model').value.trim();
+  for(let n=0;n<3;n++){
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:typeof p=='string'?[{text:p}]:p}],generationConfig:{responseMimeType:'application/json',temperature:.4}})});
+    if(r.status==429||r.status>=500){await new Promise(x=>setTimeout(x,2500*(n+1)));continue}
+    const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
+    const t=(j.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');
+    try{return JSON.parse(t.replace(/```json|```/g,''))}catch(e){if(n==2)throw new Error('Model returned bad JSON')}
+  }
+  throw new Error('Failed after retries');
+}
+async function pool(items,fn,n=3){const res=[];let i=0;await Promise.all(Array.from({length:n},async()=>{while(i<items.length){const k=i++;res[k]=await fn(items[k],k)}}));return res}
+
+$('#go').onclick=async()=>{
+  const b=$('#go');
+  try{
+    pt();
+    if(!L.length)return say('Add a transcript with timestamps first');
+    if(!$('#key').value.trim())return say('Add your Gemini API key');
+    b.disabled=true;b.textContent='Working';
+    const mx=+$('#max').value||60,N=+$('#n').value||8,ex=$('#ex').value.trim();
+    const R=RULES(mx)+(ex?`\n\nWINNING CLIPS FROM THIS NICHE. Study where they start, how long they run, what hook type they use, and copy that pattern:\n${ex.slice(0,20000)}`:'');
+    const cs=chunks();let d=0;
+    const r1=await pool(cs,async ls=>{
+      const j=await llm(`${R}\n\nTRANSCRIPT SECTION:\n${ls.map(ln).join('\n')}\n\nFind up to 5 strongest standalone clips in this section. Return fewer or none if nothing is good. s and e are the line numbers in brackets, inclusive. JSON only: {"c":[{"s":0,"e":0,"why":"short"}]}`);
+      say(`Scanning section ${++d} of ${cs.length}`);return j.c||[]});
+    let cand=[].concat(...r1).filter(c=>Number.isInteger(c.s)&&Number.isInteger(c.e)&&c.s>=0&&c.e<L.length&&c.e>=c.s).sort((a,b)=>a.s-b.s);
+    const u=[];for(const c of cand){const p=u[u.length-1];if(p&&c.s<=p.e)continue;u.push(c)}
+    if(!u.length)return say('No strong moments found. Try a longer transcript or add winning examples.');
+    say(`Judging ${u.length} candidates`);
+    const blk=u.map((c,k)=>{const lo=Math.max(0,c.s-3),hi=Math.min(L.length-1,c.e+3);let s=`CANDIDATE ${k}. First pass note: ${c.why||''}. You may pick s and e anywhere from line ${lo} to ${hi}.\n`;for(let i=lo;i<=hi;i++)s+=ln(i)+'\n';return s}).join('\n');
+    const j=await llm(`${R}\n\nBelow are candidate moments with a few lines of surrounding context. Re judge them as a harsh editor. Trim the windup, fix the start and end, drop weak ones, and return the best ${N} sorted by score. Score honestly from 1 to 10: most are 5 or below, give 8 or more only if it would hold a total stranger. Never return overlapping clips.\nFor each clip return: s, e (line numbers), score, hooks (3 options for the opening spoken line or on screen first line), overlay (text overlay, max 8 words), format (editing format suggestion), why (why it works), cut (what setup you removed or whether it stands alone), risk (weakest point).\nJSON only: {"clips":[{"s":0,"e":0,"score":0,"hooks":["","",""],"overlay":"","format":"","why":"","cut":"","risk":""}]}\n\n${blk}`);
+    clips=(j.clips||[]).filter(c=>Number.isInteger(c.s)&&Number.isInteger(c.e)).map(c=>{
+      c.s=Math.max(0,Math.min(c.s,L.length-1));c.e=Math.max(c.s,Math.min(c.e,L.length-1));
+      c.a=Math.max(0,L[c.s].t-.3);c.b=L[c.e+1]?L[c.e+1].t:L[c.e].t+4;
+      c.txt=L.slice(c.s,c.e+1).map(x=>x.x).join(' ');return c});
+    clips.sort((x,y)=>(y.score||0)-(x.score||0));
+    act=-1;if(clips[0])clips[0].open=true;
+    draw();$('#setup').open=false;say(`${clips.length} clips found. Tap one to jump to it.`);
+  }catch(e){say('Error: '+e.message)}finally{b.disabled=false;b.textContent='Find clips'}
 };
 
-function promptFor(chunkStart, chunkEnd, maxLen, clipMode) {
-  return `You are an elite short-form video editor and retention specialist for high-growth channels (TikTok, Reels, YouTube Shorts).
-
-This audio chunk covers roughly ${Math.round(chunkStart)}s to ${Math.round(chunkEnd)}s of the episode.
-IMPORTANT: Return all timestamps RELATIVE TO THIS CHUNK'S OWN AUDIO (where 0.0s is the beginning of this chunk).
-
-YOUR MISSION - MANDATORY STORY CONTEXT (NO MID-CONVERSATION CONFUSION):
-Viewers hate clicking a short clip and having zero idea what anyone is talking about because it drops mid-sentence. Every clip you create must completely stand on its own:
-
-1. MANDATORY SETUP/PREMISE SEGMENT (First Cut):
-   - Every clip MUST begin with a 3 to 6-second "setup" or "premise" segment where the speaker introduces the core question, topic, or subject (e.g., "Would you trade [Player] tomorrow?", "Let's talk about [Topic]"). 
-   - Never start cold on an random punchline or heated exclamation without establishing the topic first.
-
-2. THE CLIMAX / PAYOFF SEGMENT (Following Cut):
-   - Immediately follow the setup with the actual hot take, bold prediction, roasting, or hilarious reaction that makes the clip viral.
-   - Total segments per clip should be 2 to 3 tight cuts (Setup -> Escalation -> Payoff).
-
-3. PACING & ELIMINATING DEAD AIR:
-   - Keep individual segments lean (4 to 12 seconds each), cutting out boring filler words, stumbles, or long pauses.
-
-- ${clipMode === "contextual" ? "STRONGLY PREFER multi-cut contextual clips (2 to 3 fast cuts) that start with a clear topic setup followed immediately by the punchline." : clipMode === "single" ? "Prefer single continuous cuts that naturally include their own introduction." : "Include multi-cut story arcs with clear setups."}
-- The combined total duration of all segments in a clip MUST NOT exceed ${maxLen} seconds (ideal sweet spot: 25 to 55 seconds).
-- Each segment must have start_seconds < end_seconds and be at least 3 seconds long.
-- Do not overlap timestamps across segments.
-
-Score each clip 1-10 on viral hook power and clarity for new viewers. Include clips scoring 5 or higher.
-Respond strictly in JSON matching the schema.`;
+const cmd=(c,i)=>`ffmpeg -ss ${c.a.toFixed(2)} -i "${vname}" -t ${(c.b-c.a).toFixed(2)} -c:v libx264 -crf 18 -c:a aac "clip${i+1}.mp4"`;
+const cp=t=>`<button class="cp" data-a="cp" data-t="${esc(t)}">${esc(t)}</button>`;
+const stp=(k,l,val)=>`<div class="sp"><span>${l}</span><button data-a="adj" data-k="${k}" data-d="-0.5" aria-label="${l} earlier">−</button><output>${fmt(val)}</output><button data-a="adj" data-k="${k}" data-d="0.5" aria-label="${l} later">+</button></div>`;
+function draw(){
+  $('#cnt').textContent=clips.length?`${clips.length} clips`:'Clips';
+  $('#all').hidden=!clips.length;
+  $('#out').innerHTML=clips.length?clips.map((c,i)=>`<article class="cd${c.open?' open':''}${i==act?' act':''}" data-i="${i}">
+<header data-a="tog"><b class="sc${c.score>=8?' hot':''}">${c.score??'?'}</b><div class="hd"><div class="tc">${fmt(c.a)} to ${fmt(c.b)}, ${(c.b-c.a).toFixed(0)}s</div><p>${esc(c.txt)}</p></div></header>
+<div class="bd"><dl>
+<dt>Hooks</dt><dd>${(c.hooks||[]).map(cp).join('')}</dd>
+<dt>Overlay</dt><dd>${cp(c.overlay||'')}</dd>
+<dt>Format</dt><dd>${esc(c.format)}</dd>
+<dt>Why</dt><dd>${esc(c.why)}</dd>
+<dt>Context</dt><dd>${esc(c.cut)}</dd>
+<dt>Risk</dt><dd>${esc(c.risk)}</dd></dl>
+${stp('a','Start',c.a)}${stp('b','End',c.b)}
+<div class="ac"><button class="p" data-a="play">Play</button><button data-a="cmd">Copy ffmpeg</button><button data-a="exp">Export</button></div>
+</div></article>`).join(''):`<p class="em">No clips yet. Add a transcript, open Setup and press Find clips.</p>`;
+  tl();
 }
-
-// ---------- UI helpers ----------
-const $ = (id) => document.getElementById(id);
-const logEl = $("log"), barEl = $("bar"), barFill = $("barFill"), errEl = $("err");
-const runBtn = $("runBtn"), zipBtn = $("zipBtn");
-
-function log(msg) {
-  logEl.classList.add("show");
-  logEl.textContent += msg + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
+function tl(){
+  const D=dur();
+  $('#tl').innerHTML=clips.map((c,i)=>`<i data-i="${i}" class="${i==act?'on':''}" style="left:${Math.min(99,c.a/D*100)}%;width:${(c.b-c.a)/D*100}%"></i>`).join('')+'<u id="ph"></u>';
 }
-function setProgress(pct) {
-  barEl.classList.add("show");
-  barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+function sel(i,play){
+  const c=clips[i];act=i;
+  document.querySelectorAll('.cd').forEach(e=>e.classList.toggle('act',+e.dataset.i==i));
+  document.querySelectorAll('#tl i').forEach(e=>e.classList.toggle('on',+e.dataset.i==i));
+  if(!hasV())return say('Choose the video to preview');
+  v.currentTime=c.a;stopAt=0;if(play){stopAt=c.b;v.play()}
 }
-function showError(msg) {
-  errEl.classList.add("show");
-  errEl.textContent = msg;
+function tail(c){if(!hasV())return;v.currentTime=Math.max(c.a,c.b-3);stopAt=c.b;v.play()}
+$('#out').onclick=e=>{
+  const el=e.target.closest('[data-a]');if(!el)return;
+  const card=el.closest('.cd'),i=+card.dataset.i,c=clips[i],a=el.dataset.a;
+  if(a=='tog'){c.open=!c.open;card.classList.toggle('open',c.open);if(c.open)sel(i,false)}
+  if(a=='play')sel(i,true);
+  if(a=='adj'){const k=el.dataset.k;c[k]=Math.max(0,c[k]+ +el.dataset.d);if(c.b-c.a<1)c[k=='a'?'a':'b']-= +el.dataset.d;draw();act=i;if(k=='a')sel(i,true);else tail(c);sel2(i)}
+  if(a=='cmd'){navigator.clipboard.writeText(cmd(c,i));say('ffmpeg command copied')}
+  if(a=='cp'){navigator.clipboard.writeText(el.dataset.t);say('Copied')}
+  if(a=='exp')exp(c,i);
+};
+function sel2(i){document.querySelectorAll('.cd').forEach(e=>e.classList.toggle('act',+e.dataset.i==i));document.querySelectorAll('#tl i').forEach(e=>e.classList.toggle('on',+e.dataset.i==i))}
+$('#tl').onclick=e=>{
+  const t=e.target.closest('i');
+  if(t){const i=+t.dataset.i;clips[i].open=true;draw();sel(i,true);document.querySelector(`.cd[data-i="${i}"]`)?.scrollIntoView({block:'nearest',behavior:'smooth'});return}
+  if(hasV()){const r=$('#tl').getBoundingClientRect();v.currentTime=Math.max(0,(e.clientX-r.left)/r.width*dur())}
+};
+$('#all').onclick=()=>{navigator.clipboard.writeText(clips.map((c,i)=>`${i+1}. ${fmt(c.a)} to ${fmt(c.b)} | score ${c.score} | ${c.overlay}\n${cmd(c,i)}`).join('\n\n'));say('All timestamps copied')};
+setInterval(()=>{
+  const ph=$('#ph');if(ph&&hasV())ph.style.left=(v.currentTime/dur()*100)+'%';
+  if(stopAt&&v.currentTime>=stopAt){v.pause();stopAt=0;if(endCb){const f=endCb;endCb=null;f()}}
+},40);
+
+async function exp(c,i){
+  if(!hasV())return say('Choose the video first');
+  if(!v.captureStream)return say('This browser cannot record. Use Copy ffmpeg on a PC.');
+  v.pause();v.currentTime=c.a;
+  await Promise.race([new Promise(r=>v.addEventListener('seeked',r,{once:true})),new Promise(r=>setTimeout(r,1500))]);
+  const mt=['video/webm;codecs=vp9,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  const rec=new MediaRecorder(v.captureStream(),{mimeType:mt}),ch=[];
+  rec.ondataavailable=e=>e.data.size&&ch.push(e.data);
+  rec.onstop=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(ch,{type:'video/webm'}));a.download=`clip${i+1}.webm`;a.click();say('Exported clip '+(i+1))};
+  say(`Recording clip ${i+1} in real time. Keep this tab open.`);
+  endCb=()=>rec.stop();stopAt=c.b;rec.start();v.play();
 }
-function clearError() {
-  errEl.classList.remove("show");
-  errEl.textContent = "";
+const ASK=vw=>`This short form clip got ${vw||'an unknown number of'} views. Study it like an editor reverse engineering why it worked. JSON only: {"transcript":"full spoken text","seconds":0,"hookLine":"exact first spoken line","hookType":"claim, question, number, story, conflict or other","overlay":"on screen text if visible, else none","format":"how it is shot and edited, or unknown if audio only","opening":"where the clip starts and what setup was cut","payoff":"where the payoff lands, in seconds from the start","why":"why it likely performed"}`;
+const ytUrl=u=>{const m=u.match(/(?:youtu\.be\/|shorts\/|v=|embed\/)([\w-]{11})/);return m?'https://www.youtube.com/watch?v='+m[1]:null};
+function wi(t){const d=document.createElement('div');d.className='wi';d.textContent=t;$('#wl').appendChild(d);return d}
+async function study(getParts,label){
+  const vw=$('#vw').value.trim(),el=wi('Analyzing '+label+'...');
+  try{
+    const j=await llm((await getParts()).concat([{text:ASK(vw)}]));
+    const blk=`CLIP (${vw||'views unknown'}, ${Math.round(j.seconds||0)}s)\nHook line: ${j.hookLine}\nHook type: ${j.hookType}\nOverlay: ${j.overlay}\nFormat: ${j.format}\nOpening: ${j.opening}\nPayoff: ${j.payoff}\nWhy it worked: ${j.why}\nTranscript: ${j.transcript}`;
+    const ex=$('#ex');ex.value=(ex.value?ex.value+'\n\n':'')+blk;LS.s('dc_ex',ex.value);
+    el.textContent='Added: '+label;
+  }catch(e){el.textContent='Failed: '+label+' ('+e.message+')'}
 }
-function mmss(s) {
-  s = Math.max(0, Math.round(s));
-  const m = Math.floor(s / 60), r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
+$('#yb').onclick=async()=>{
+  if(!$('#key').value.trim())return say('Add your Gemini API key first');
+  const u=ytUrl($('#yt').value);if(!u)return say('That is not a YouTube link');
+  $('#yt').value='';await study(async()=>[{fileData:{fileUri:u}}],u.slice(-11));
+};
+$('#wf').onchange=async e=>{
+  if(!$('#key').value.trim())return say('Add your Gemini API key first');
+  for(const f of e.target.files)await study(async()=>[{inlineData:{mimeType:'audio/wav',data:await wav(f)}}],f.name);
+  e.target.value='';
+};
+async function wav(f){
+  if(f.size>400e6)throw new Error('File too big, use a short clip');
+  const ac=new (window.AudioContext||window.webkitAudioContext)({sampleRate:16000});
+  const buf=await ac.decodeAudioData(await f.arrayBuffer());ac.close();
+  if(buf.duration>300)throw new Error('Longer than 5 minutes');
+  const n=buf.length,chs=[...Array(buf.numberOfChannels).keys()].map(i=>buf.getChannelData(i)),o=new DataView(new ArrayBuffer(44+n*2));
+  const w=(p,t)=>{for(let i=0;i<t.length;i++)o.setUint8(p+i,t.charCodeAt(i))};
+  w(0,'RIFF');o.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');o.setUint32(16,16,true);o.setUint16(20,1,true);o.setUint16(22,1,true);o.setUint32(24,16000,true);o.setUint32(28,32000,true);o.setUint16(32,2,true);o.setUint16(34,16,true);w(36,'data');o.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++){let x=0;for(const c of chs)x+=c[i];x/=chs.length;o.setInt16(44+i*2,Math.max(-1,Math.min(1,x))*32767,true)}
+  return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(new Blob([o],{type:'audio/wav'}))});
 }
-
-// persist API key locally
-const savedKey = localStorage.getItem("dc_gemini_key");
-if (savedKey) $("apiKey").value = savedKey;
-$("apiKey").addEventListener("change", (e) => {
-  localStorage.setItem("dc_gemini_key", e.target.value.trim());
-});
-
-// ---------- ffmpeg ----------
-let ffmpeg = null;
-async function getFFmpeg() {
-  if (ffmpeg) return ffmpeg;
-  log("Loading FFmpeg WebAssembly (~30MB, downloaded once)...");
-  const instance = new FFmpeg();
-  instance.on("log", ({ message }) => {
-    const m = message.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
-    if (m) instance._duration = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
-  });
-  try {
-    await instance.load({
-      coreURL: "/ffmpeg/ffmpeg-core.js",
-      wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-      classWorkerURL: `${window.location.origin}/ffmpeg/worker.js`,
-    });
-  } catch (e) {
-    throw new Error(`Could not load FFmpeg engine: ${e.message || e}`);
-  }
-  ffmpeg = instance;
-  log("FFmpeg ready.");
-  return ffmpeg;
-}
-
-async function getDuration(ff, inputName) {
-  ff._duration = null;
-  try {
-    await ff.exec(["-i", inputName]);
-  } catch (e) { /* ffmpeg exits non-zero with no output file, expected */ }
-  return ff._duration || 0;
-}
-
-// ---------- Gemini API ----------
-async function analyzeChunk(apiKey, bytes, mimeType, chunkStart, chunkEnd, maxLen, clipMode) {
-  const base64 = arrayBufferToBase64(bytes);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body = {
-    contents: [{
-      parts: [
-        { inline_data: { mime_type: mimeType, data: base64 } },
-        { text: promptFor(chunkStart, chunkEnd, maxLen, clipMode) },
-      ],
-    }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: CLIP_SCHEMA,
-    },
-  };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${text.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "{}";
-  let parsed;
-  try { parsed = JSON.parse(text); }
-  catch { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
-
-  const clips = (parsed.clips || []).map(c => {
-    // Normalize and calibrate segment timestamps to whole-episode time
-    const segments = (c.segments && c.segments.length > 0)
-      ? c.segments.map(seg => ({
-          start_seconds: Math.max(0, seg.start_seconds + chunkStart),
-          end_seconds: Math.max(0, seg.end_seconds + chunkStart),
-          type: seg.type || "moment",
-          description: seg.description || ""
-        }))
-      : [{
-          start_seconds: Math.max(0, (c.start_seconds || 0) + chunkStart),
-          end_seconds: Math.max(0, (c.end_seconds || (c.start_seconds || 0) + 30) + chunkStart),
-          type: "take",
-          description: c.title || ""
-        }];
-
-    // Overall span
-    const minStart = Math.min(...segments.map(s => s.start_seconds));
-    const maxEnd = Math.max(...segments.map(s => s.end_seconds));
-    const totalDuration = segments.reduce((acc, s) => acc + Math.max(0, s.end_seconds - s.start_seconds), 0);
-
-    return {
-      ...c,
-      start_seconds: minStart,
-      end_seconds: maxEnd,
-      total_duration: totalDuration,
-      segments: segments.sort((a, b) => a.start_seconds - b.start_seconds)
-    };
-  });
-
-  return clips;
-}
-
-function arrayBufferToBase64(bytes) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-// Deduplicate clips based on overlap across segments
-function dedupe(clips) {
-  const sorted = [...clips].sort((a, b) => b.hook_score - a.hook_score);
-  const kept = [];
-  for (const c of sorted) {
-    const overlaps = kept.some(k => {
-      // Check if primary segments overlap significantly
-      const overlap = Math.min(c.end_seconds, k.end_seconds) - Math.max(c.start_seconds, k.start_seconds);
-      const shorter = Math.min(c.end_seconds - c.start_seconds, k.end_seconds - k.start_seconds);
-      return overlap > 0 && overlap > shorter * 0.6;
-    });
-    if (!overlaps) kept.push(c);
-  }
-  return kept;
-}
-
-// ---------- Main Pipeline ----------
-runBtn.addEventListener("click", async () => {
-  clearError();
-  $("results").innerHTML = "";
-  $("resultsWrap").style.display = "none";
-  logEl.textContent = "";
-
-  const apiKey = $("apiKey").value.trim();
-  const file = $("file").files[0];
-  const minScore = parseInt($("minScore").value, 10) || 6;
-  const topN = parseInt($("topN").value, 10) || 12;
-  const maxLen = parseInt($("maxLen").value, 10) || 90;
-  const clipMode = $("clipMode").value;
-
-  if (!apiKey) return showError("Enter your Gemini API key first.");
-  if (!file) return showError("Pick a video or audio file first.");
-
-  runBtn.disabled = true;
-  setProgress(2);
-
-  try {
-    const ff = await getFFmpeg();
-    const inExt = (file.name.split(".").pop() || "mp4").toLowerCase();
-    const isAudioOnly = inExt === "mp3" || inExt === "m4a" || inExt === "wav" || inExt === "aac";
-    const outExt = isAudioOnly ? "mp3" : "mp4";
-    const inputName = `input.${inExt}`;
-
-    log(`Loading file: ${file.name} (${(file.size / 1e6).toFixed(1)} MB)`);
-    await ff.writeFile(inputName, await fetchFile(file));
-    setProgress(8);
-
-    log("Reading duration...");
-    const duration = await getDuration(ff, inputName);
-    if (!duration) throw new Error("Could not read file duration. Try a different file.");
-    log(`Duration: ${mmss(duration)}`);
-
-    log("Extracting low-bitrate audio track for Gemini analysis...");
-    await ff.exec(["-i", inputName, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", "audio.mp3"]);
-    setProgress(18);
-
-    const estMB = ((duration * 32) / 8 / 1024).toFixed(1);
-    log(`Estimated data to upload: ~${estMB} MB (audio only, original video stays on device).`);
-
-    // Split audio into chunks for analysis
-    const chunks = [];
-    let t = 0, idx = 0;
-    while (t < duration) {
-      const start = idx === 0 ? 0 : Math.max(0, t - OVERLAP_SECONDS);
-      const end = Math.min(duration, t + CHUNK_SECONDS);
-      chunks.push({ start, end, idx });
-      t += CHUNK_SECONDS;
-      idx++;
-    }
-    log(`Split into ${chunks.length} chunk(s) for contextual scanning.`);
-
-    let allClips = [];
-    for (const c of chunks) {
-      const chunkFile = `chunk_${c.idx}.mp3`;
-      await ff.exec(["-ss", `${c.start}`, "-to", `${c.end}`, "-i", "audio.mp3", "-c", "copy", chunkFile]);
-      const bytes = await ff.readFile(chunkFile);
-      log(`Analyzing chunk ${c.idx + 1}/${chunks.length} (${mmss(c.start)}-${mmss(c.end)})...`);
-      const clips = await analyzeChunk(apiKey, bytes, "audio/mpeg", c.start, c.end, maxLen, clipMode);
-      log(`  found ${clips.length} candidate moment(s)`);
-      allClips.push(...clips);
-      await ff.deleteFile(chunkFile);
-      setProgress(18 + (50 * (c.idx + 1)) / chunks.length);
-    }
-
-    allClips = dedupe(allClips).filter(c => c.hook_score >= minScore);
-    allClips.sort((a, b) => b.hook_score - a.hook_score);
-    allClips = allClips.slice(0, topN);
-
-    if (!allClips.length) {
-      log("No moments cleared the score bar. Try lowering min score.");
-      setProgress(100);
-      runBtn.disabled = false;
-      return;
-    }
-
-    log(`Cutting & splicing ${allClips.length} contextual clip(s) from original video...`);
-    const outFiles = [];
-
-    for (let i = 0; i < allClips.length; i++) {
-      const c = allClips[i];
-      const cutsCount = c.segments.length;
-      const outName = `clip_${i + 1}_${cutsCount}cuts.${outExt}`;
-
-      if (cutsCount === 1) {
-        // Single continuous cut
-        const seg = c.segments[0];
-        const s = Math.max(0, seg.start_seconds - 0.5);
-        const len = Math.min((seg.end_seconds - seg.start_seconds) + 1, maxLen);
-        log(`  [${i + 1}/${allClips.length}] Single cut: ${mmss(s)} to ${mmss(s + len)} (${c.title})`);
-        await ff.exec(["-ss", `${s}`, "-i", inputName, "-t", `${len}`, "-c", "copy", outName]);
-      } else {
-        // Multi-cut contextual splice
-        log(`  [${i + 1}/${allClips.length}] Splicing ${cutsCount} cuts together: ${c.title}`);
-        const partNames = [];
-        let listContent = "";
-
-        for (let p = 0; p < cutsCount; p++) {
-          const seg = c.segments[p];
-          const segStart = Math.max(0, seg.start_seconds - 0.3);
-          const segDuration = Math.max(1, seg.end_seconds - seg.start_seconds + 0.6);
-          const partFile = `part_${i}_${p}.${outExt}`;
-
-          // Cut individual segment cleanly
-          await ff.exec(["-ss", `${segStart}`, "-i", inputName, "-t", `${segDuration}`, "-c", "copy", partFile]);
-          partNames.push(partFile);
-          listContent += `file '${partFile}'\n`;
-          log(`    Cut ${p + 1} (${seg.type}): ${mmss(segStart)} to ${mmss(segStart + segDuration)} - "${seg.description || ''}"`);
-        }
-
-        // Write concat list file
-        const listFile = `list_${i}.txt`;
-        const encoder = new TextEncoder();
-        await ff.writeFile(listFile, encoder.encode(listContent));
-
-        // Concatenate using FFmpeg concat demuxer
-        let concatSuccess = false;
-        try {
-          await ff.exec(["-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", outName]);
-          concatSuccess = true;
-        } catch (concatErr) {
-          log(`    Warning: Direct stream concat fallback: re-encoding audio/video streams...`);
-        }
-
-        if (!concatSuccess) {
-          // Fallback in case container timestamps or codecs differ slightly across segments
-          if (isAudioOnly) {
-            await ff.exec(["-f", "concat", "-safe", "0", "-i", listFile, "-c:a", "libmp3lame", "-b:a", "128k", outName]);
-          } else {
-            await ff.exec(["-f", "concat", "-safe", "0", "-i", listFile, "-c:v", "libx264", "-c:a", "aac", "-b:a", "128k", outName]);
-          }
-        }
-
-        // Cleanup intermediate cut parts
-        await ff.deleteFile(listFile);
-        for (const part of partNames) {
-          try { await ff.deleteFile(part); } catch (_) {}
-        }
-      }
-
-      const data = await ff.readFile(outName);
-      outFiles.push({ name: outName, data, clip: c });
-      await ff.deleteFile(outName);
-
-      setProgress(68 + (30 * (i + 1)) / allClips.length);
-      log(`  ✓ Clip #${i + 1} generated (${c.hook_score}/10): ${c.title}`);
-    }
-
-    renderResults(outFiles, outExt);
-    setProgress(100);
-    log("All clips spliced and ready!");
-  } catch (e) {
-    console.error(e);
-    showError(e.message || String(e));
-  } finally {
-    runBtn.disabled = false;
-  }
-});
-
-let lastFiles = [];
-function renderResults(files, outExt) {
-  lastFiles = files;
-  const wrap = $("results");
-  wrap.innerHTML = "";
-  $("resultsTitle").textContent = `${files.length} contextual clip${files.length > 1 ? "s" : ""}`;
-
-  files.forEach((f, i) => {
-    const isAudio = outExt === "mp3" || outExt === "m4a";
-    const blob = new Blob([f.data.buffer], { type: isAudio ? "audio/mpeg" : "video/mp4" });
-    const url = URL.createObjectURL(blob);
-    const c = f.clip;
-    const cutsCount = (c.segments && c.segments.length) || 1;
-
-    const div = document.createElement("div");
-    div.className = "clip";
-
-    // Build segments breakdown html
-    let segsHtml = "";
-    if (c.segments && c.segments.length > 1) {
-      segsHtml = `<div class="segments">` + c.segments.map((s, sIdx) => `
-        <div class="seg-row">
-          <span class="seg-type">${escapeHtml(s.type || `Cut ${sIdx + 1}`)}</span>
-          <span class="seg-time">${mmss(s.start_seconds)} – ${mmss(s.end_seconds)}</span>
-          <span class="seg-desc">${escapeHtml(s.description || "")}</span>
-        </div>
-      `).join("") + `</div>`;
-    }
-
-    const previewMedia = isAudio
-      ? `<audio controls src="${url}" style="width:100%; margin-top:10px;"></audio>`
-      : `<video controls playsinline src="${url}" style="width:100%; max-height:280px; border-radius:8px; margin-top:10px; background:#000;"></video>`;
-
-    div.innerHTML = `
-      <div class="top">
-        <div class="title">${i + 1}. ${escapeHtml(c.title)}</div>
-        <div class="badges">
-          <div class="badge ${cutsCount > 1 ? "cuts" : ""}">${cutsCount > 1 ? `${cutsCount} cuts spliced` : "1 continuous cut"}</div>
-          <div class="score ${c.hook_score < 8 ? "mid" : ""}">${c.hook_score}/10</div>
-        </div>
-      </div>
-      <div class="meta">
-        Total span: ${mmss(c.start_seconds)} – ${mmss(c.end_seconds)}
-        ${c.total_duration ? ` &bull; Duration: ~${Math.round(c.total_duration)}s` : ""}
-      </div>
-      ${c.context_summary ? `<div class="context-note"><strong>Story Context:</strong> ${escapeHtml(c.context_summary)}</div>` : ""}
-      <div class="reason"><strong>Viral Angle:</strong> ${escapeHtml(c.reason)}</div>
-      ${segsHtml}
-      ${previewMedia}
-      <div class="actions">
-        <a class="dl" href="${url}" download="${f.name}">Download Clip (${cutsCount > 1 ? `${cutsCount}-cut story` : "full clip"})</a>
-      </div>
-    `;
-    wrap.appendChild(div);
-  });
-  $("resultsWrap").style.display = "block";
-}
-
-function escapeHtml(s) {
-  return (s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
-}
-
-zipBtn.addEventListener("click", () => {
-  if (!lastFiles.length) return;
-  const entries = {};
-  lastFiles.forEach(f => { entries[f.name] = new Uint8Array(f.data); });
-  let notes = "CONTEXTUAL CLIPS SUMMARY\n=========================\n\n";
-  lastFiles.forEach((f, i) => {
-    const cuts = (f.clip.segments && f.clip.segments.length) || 1;
-    notes += `${f.name}\n`;
-    notes += `  Title: ${f.clip.title}\n`;
-    notes += `  Viral Score: ${f.clip.hook_score}/10\n`;
-    notes += `  Cuts Spliced: ${cuts}\n`;
-    notes += `  Context: ${f.clip.context_summary || 'N/A'}\n`;
-    notes += `  Angle: ${f.clip.reason}\n`;
-    if (f.clip.segments && f.clip.segments.length > 0) {
-      notes += `  Segments Breakdown:\n`;
-      f.clip.segments.forEach((seg, sIdx) => {
-        notes += `    [Cut ${sIdx + 1}] (${seg.type}) ${mmss(seg.start_seconds)}-${mmss(seg.end_seconds)}: ${seg.description}\n`;
-      });
-    }
-    notes += `\n-------------------------\n\n`;
-  });
-  entries["story_moments.txt"] = new TextEncoder().encode(notes);
-  const zipped = zipSync(entries, { level: 0 });
-  const blob = new Blob([zipped], { type: "application/zip" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "contextual_clips.zip";
-  document.body.appendChild(a); a.click(); a.remove();
-});
-</script>
-</body>
-</html>
+draw();
+</script></body></html>
