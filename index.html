@@ -115,10 +115,11 @@ dt{color:var(--mu);font-size:14px}dd{margin:0}
 
   <div class="g">
    <div><label class="l" for="key">Gemini API key</label><input id="key" type="password" autocomplete="off" placeholder="AIza..."></div>
-   <div><label class="l" for="model">Model</label><input id="model" value="gemini-2.5-flash"></div>
+   <div style="grid-column:1/-1"><label class="l" for="models">Models, rotated in order</label><input id="models" value="gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite" autocapitalize="off" spellcheck="false"></div>
    <div><label class="l" for="max">Longest clip, seconds</label><input id="max" type="number" inputmode="numeric" value="60"></div>
    <div><label class="l" for="n">Clips to return</label><input id="n" type="number" inputmode="numeric" value="8"></div>
   </div>
+  <p class="h" style="margin-top:8px">Separate model names with commas. Requests rotate through the list, and a model that hits its limit is skipped automatically. Each model has its own quota. A full run needs only 2 requests for a normal length episode.</p>
   <button class="pri" id="go">Find clips</button>
  </div>
 </details>
@@ -131,15 +132,16 @@ dt{color:var(--mu);font-size:14px}dd{margin:0}
 <script>
 const $=s=>document.querySelector(s),v=$('#v');
 const LS={g:k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}},s:(k,x)=>{try{localStorage.setItem(k,x)}catch(e){}}};
-let L=[],clips=[],vname='video.mp4',stopAt=0,endCb=null,act=-1;
+let L=[],clips=[],vname='video.mp4',stopAt=0,endCb=null,act=-1,reqs=0,rot=+LS.g('dc_rot')||0,used=new Set();
 const say=t=>$('#st').textContent=t;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=t=>{t=Math.max(0,t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+s.toFixed(1).padStart(4,'0')};
 const mmss=t=>fmt(t).replace(/\.\d$/,'');
 const hasV=()=>!!v.getAttribute('src');
 const dur=()=>(isFinite(v.duration)&&v.duration)||(L.length?L[L.length-1].t:0)||1;
 
-['key','model','ex'].forEach(k=>{const e=$('#'+k),s=LS.g('dc_'+k);if(s)e.value=s;e.oninput=()=>LS.s('dc_'+k,e.value)});
+['key','models','ex'].forEach(k=>{const e=$('#'+k),s=LS.g('dc_'+k);if(s)e.value=s;e.oninput=()=>LS.s('dc_'+k,e.value)});
 $('#vf').onchange=e=>{const f=e.target.files[0];if(!f)return;vname=f.name;v.src=URL.createObjectURL(f);$('#vz').classList.add('on');say('Loaded '+f.name)};
 v.onloadedmetadata=tl;
 $('#tf').onchange=async e=>{const f=e.target.files[0];if(f){$('#tr').value=await f.text();pt()}};
@@ -167,28 +169,92 @@ Judge every moment on:
 3 PAYOFF: the clip must contain the answer, punchline or conclusion. Move the payoff forward by cutting windup. End right after the payoff lands, never on trailing talk.
 4 ONE IDEA: one tension that resolves. Reject tangents, name dropping without a point, and half finished thoughts.
 5 LENGTH: 20 to 60 seconds ideal, never above ${mx} seconds.
-6 PREFER: specific numbers, stories with stakes, contrarian takes, emotional admissions, funny exchanges, practical frameworks, strong opinions. REJECT: intros, outros, sponsor reads, small talk, vague motivation, anything needing earlier episode context.
+6 PREFER: specific numbers, stories with stakes, contrarian takes, emotional admissions, funny exchanges, practical frameworks, strong opinions. REJECT: intros, outros, sponsor reads and ad segments (promo codes, "brought to you by"), small talk, vague motivation, anything needing earlier episode context.
 Start and end must sit on full sentence boundaries. Be harsh. Most moments are not clips.`;
 
-const ln=i=>`[${i}] ${mmss(L[i].t)} ${L[i].x}`;
-function chunks(){const o=[],T=L[L.length-1].t;for(let a=0;a<=T;a+=540){const ls=[];for(let i=0;i<L.length;i++)if(L[i].t>=a&&L[i].t<a+600)ls.push(i);if(ls.length)o.push(ls)}return o}
+const AD=/brought to you by|sponsored by|promo code|use (the |my )?code|\.deals\b|\.com\/\w+|free trial|free copy/i;
+const isAd=(s,e)=>AD.test(L.slice(s,e+1).map(x=>x.x).join(' '));
 
-async function llm(p){
-  const key=$('#key').value.trim(),mod=$('#model').value.trim();
-  for(let n=0;n<3;n++){
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:typeof p=='string'?[{text:p}]:p}],generationConfig:{responseMimeType:'application/json',temperature:.4}})});
-    if(r.status==429||r.status>=500){await new Promise(x=>setTimeout(x,2500*(n+1)));continue}
-    const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
-    const t=(j.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');
-    try{return JSON.parse(t.replace(/```json|```/g,''))}catch(e){if(n==2)throw new Error('Model returned bad JSON')}
+const ln=i=>`[${i}] ${mmss(L[i].t)} ${L[i].x}`;
+// One chunk for normal episodes. Only splits if the transcript is huge.
+const LIM=350000;
+function chunks(){
+  const o=[];let cur=[],sz=0;
+  for(let i=0;i<L.length;i++){
+    const s=ln(i).length+1;
+    if(sz+s>LIM&&cur.length){o.push(cur);cur=cur.slice(-15);sz=cur.reduce((a,k)=>a+ln(k).length+1,0)}
+    cur.push(i);sz+=s;
   }
-  throw new Error('Failed after retries');
+  if(cur.length)o.push(cur);
+  return o;
 }
-async function pool(items,fn,n=3){const res=[];let i=0;await Promise.all(Array.from({length:n},async()=>{while(i<items.length){const k=i++;res[k]=await fn(items[k],k)}}));return res}
+
+// Rate limit aware Gemini call. Key goes in a header, not the URL.
+const down={};
+function pick(models){
+  const now=Date.now(),off=rot%models.length;
+  for(let k=0;k<models.length;k++){const m=models[(off+k)%models.length];if(!(down[m]>now))return m}
+  return null;
+}
+function errInfo(j,msg){
+  let delay=0,daily=false;
+  for(const d of (j?.error?.details||[])){
+    const t=d['@type']||'';
+    if(t.includes('RetryInfo')&&d.retryDelay)delay=parseFloat(d.retryDelay)||0;
+    if(t.includes('QuotaFailure'))for(const x of (d.violations||[]))if(/PerDay/i.test((x.quotaId||'')+(x.quotaMetric||'')))daily=true;
+  }
+  if(!delay){const m=String(msg).match(/retry in ([\d.]+)s/i);if(m)delay=parseFloat(m[1])}
+  if(/per day|PerDay|daily/i.test(String(msg)))daily=true;
+  return{delay,daily};
+}
+async function llm(p){
+  const key=$('#key').value.trim();
+  const models=[...new Set($('#models').value.split(/[\s,]+/).map(x=>x.trim()).filter(Boolean))];
+  if(!models.length)throw new Error('Add at least one model name');
+  let err=null,bad=0,s5=0;
+  for(let n=0;n<8;n++){
+    const now=Date.now();
+    const mod=pick(models);
+    if(!mod){
+      const wait=Math.min(...models.map(m=>down[m]))-now;
+      if(wait>70000)throw new Error('All models hit their limit. Daily quota resets around midnight Pacific, or enable billing on the project.');
+      say(`Rate limited, waiting ${Math.ceil(wait/1000)}s`);await sleep(wait+500);continue;
+    }
+    reqs++;
+    let r,j;
+    try{
+      r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{parts:typeof p=='string'?[{text:p}]:p}],generationConfig:{responseMimeType:'application/json',temperature:.4}})});
+      j=await r.json().catch(()=>({}));
+    }catch(e){err=new Error('Network error');await sleep(2000*(n+1));continue}
+    if(r.ok){
+      const t=(j.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');
+      try{const out=JSON.parse(t.replace(/```json|```/g,''));rot=(models.indexOf(mod)+1)%models.length;LS.s('dc_rot',String(rot));used.add(mod);return out}catch(e){err=new Error('Model returned bad JSON');if(++bad>=2)throw err;continue}
+    }
+    const msg=j.error?.message||String(r.status);
+    if(r.status==429){
+      const {delay,daily}=errInfo(j,msg);
+      down[mod]=Date.now()+(daily?6*3600e3:Math.max(15,Math.min(65,delay||30))*1000);
+      err=new Error(daily?`${mod} daily quota used up`:`${mod} rate limited`);
+      const nx=pick(models);
+      if(nx&&nx!==mod)say(`${mod} limit hit, switching to ${nx}`);
+      continue;
+    }
+    if(r.status>=500){
+      err=new Error(`${mod} is overloaded (${r.status})`);
+      if(++s5>=2)down[mod]=Date.now()+30000;
+      await sleep(Math.min(30000,2000*2**n)+Math.random()*1000);
+      continue;
+    }
+    throw new Error(msg);
+  }
+  throw err||new Error('Failed after retries');
+}
+async function pool(items,fn,n=1){const res=[];let i=0,dead=false;await Promise.all(Array.from({length:n},async()=>{while(i<items.length&&!dead){const k=i++;try{res[k]=await fn(items[k],k)}catch(e){dead=true;throw e}}}));return res}
 
 $('#go').onclick=async()=>{
   const b=$('#go');
   try{
+    reqs=0;used.clear();
     pt();
     if(!L.length)return say('Add a transcript with timestamps first');
     if(!$('#key').value.trim())return say('Add your Gemini API key');
@@ -196,10 +262,12 @@ $('#go').onclick=async()=>{
     const mx=+$('#max').value||60,N=+$('#n').value||8,ex=$('#ex').value.trim();
     const R=RULES(mx)+(ex?`\n\nWINNING CLIPS FROM THIS NICHE. Study where they start, how long they run, what hook type they use, and copy that pattern:\n${ex.slice(0,20000)}`:'');
     const cs=chunks();let d=0;
+    const per=cs.length==1?Math.max(N*2,12):Math.max(6,Math.ceil(N*2/cs.length)+2);
+    say(cs.length==1?'Scanning the full transcript':`Scanning ${cs.length} sections`);
     const r1=await pool(cs,async ls=>{
-      const j=await llm(`${R}\n\nTRANSCRIPT SECTION:\n${ls.map(ln).join('\n')}\n\nFind up to 5 strongest standalone clips in this section. Return fewer or none if nothing is good. s and e are the line numbers in brackets, inclusive. JSON only: {"c":[{"s":0,"e":0,"why":"short"}]}`);
-      say(`Scanning section ${++d} of ${cs.length}`);return j.c||[]});
-    let cand=[].concat(...r1).filter(c=>Number.isInteger(c.s)&&Number.isInteger(c.e)&&c.s>=0&&c.e<L.length&&c.e>=c.s).sort((a,b)=>a.s-b.s);
+      const j=await llm(`${R}\n\nTRANSCRIPT:\n${ls.map(ln).join('\n')}\n\nFind up to ${per} strongest standalone clips. Skip sponsor reads and ads completely. Return fewer or none if nothing is good. s and e are the line numbers in brackets, inclusive. JSON only: {"c":[{"s":0,"e":0,"why":"short"}]}`);
+      say(`Scanned section ${++d} of ${cs.length}`);return j.c||[]});
+    let cand=[].concat(...r1).filter(c=>Number.isInteger(c.s)&&Number.isInteger(c.e)&&c.s>=0&&c.e<L.length&&c.e>=c.s&&!isAd(c.s,c.e)).sort((a,b)=>a.s-b.s);
     const u=[];for(const c of cand){const p=u[u.length-1];if(p&&c.s<=p.e)continue;u.push(c)}
     if(!u.length)return say('No strong moments found. Try a longer transcript or add winning examples.');
     say(`Judging ${u.length} candidates`);
@@ -208,11 +276,11 @@ $('#go').onclick=async()=>{
     clips=(j.clips||[]).filter(c=>Number.isInteger(c.s)&&Number.isInteger(c.e)).map(c=>{
       c.s=Math.max(0,Math.min(c.s,L.length-1));c.e=Math.max(c.s,Math.min(c.e,L.length-1));
       c.a=Math.max(0,L[c.s].t-.3);c.b=L[c.e+1]?L[c.e+1].t:L[c.e].t+4;
-      c.txt=L.slice(c.s,c.e+1).map(x=>x.x).join(' ');return c});
+      c.txt=L.slice(c.s,c.e+1).map(x=>x.x).join(' ');return c}).filter(c=>!AD.test(c.txt));
     clips.sort((x,y)=>(y.score||0)-(x.score||0));
     act=-1;if(clips[0])clips[0].open=true;
-    draw();$('#setup').open=false;say(`${clips.length} clips found. Tap one to jump to it.`);
-  }catch(e){say('Error: '+e.message)}finally{b.disabled=false;b.textContent='Find clips'}
+    draw();$('#setup').open=false;say(`${clips.length} clips found in ${reqs} requests (${[...used].join(', ')}). Tap one to jump to it.`);
+  }catch(e){say(`Error: ${e.message} (${reqs} requests this run)`)}finally{b.disabled=false;b.textContent='Find clips'}
 };
 
 const cmd=(c,i)=>`ffmpeg -ss ${c.a.toFixed(2)} -i "${vname}" -t ${(c.b-c.a).toFixed(2)} -c:v libx264 -crf 18 -c:a aac "clip${i+1}.mp4"`;
